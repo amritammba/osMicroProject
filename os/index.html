@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Banker's Algorithm Simulator</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+</head>
+<body>
+  <div class="app-container">
+    <header>
+      <h1>Banker's Algorithm Simulator</h1>
+      <p class="subtitle">Resource allocation and deadlock avoidance</p>
+    </header>
+
+    <main>
+      <section class="setup-section card">
+        <h2>System Configuration</h2>
+        
+        <div class="input-group">
+          <div class="form-control">
+            <label for="numProcesses">Number of Processes</label>
+            <input type="number" id="numProcesses" min="1" value="3">
+          </div>
+          
+          <div class="form-control">
+            <label for="numResources">Number of Resource Types</label>
+            <input type="number" id="numResources" min="1" value="3">
+          </div>
+        </div>
+        
+        <div class="form-control">
+          <label for="available">Available Resources</label>
+          <input type="text" id="available" placeholder="e.g., 3,3,2">
+          <small>Enter comma-separated values</small>
+        </div>
+        
+        <div class="form-control">
+          <label for="maxMatrix">Maximum Demand Matrix</label>
+          <textarea id="maxMatrix" placeholder="e.g., 7,5,3;3,2,2;9,0,2"></textarea>
+          <small>Enter rows separated by semicolons</small>
+        </div>
+        
+        <div class="form-control">
+          <label for="allocMatrix">Allocation Matrix</label>
+          <textarea id="allocMatrix" placeholder="e.g., 0,1,0;2,0,0;3,0,2"></textarea>
+          <small>Enter rows separated by semicolons</small>
+        </div>
+        
+        <button id="simulateBtn" class="btn primary-btn">Check System Safety</button>
+      </section>
+
+      <section class="request-section card">
+        <h2>Resource Request</h2>
+        
+        <div class="input-group">
+          <div class="form-control">
+            <label for="requestProcessId">Process ID</label>
+            <input type="number" id="requestProcessId" min="0" value="0">
+          </div>
+          
+          <div class="form-control">
+            <label for="requestVector">Request Vector</label>
+            <input type="text" id="requestVector" placeholder="e.g., 1,0,2">
+            <small>Enter comma-separated values</small>
+          </div>
+        </div>
+        
+        <button id="requestBtn" class="btn secondary-btn">Request Resources</button>
+      </section>
+
+      <section class="results-section">
+        <div class="card" id="safetyResult">
+          <h2>Safety Analysis</h2>
+          <div id="result" class="result-content">
+            <p class="placeholder-text">Run the safety check to see results</p>
+          </div>
+        </div>
+        
+        <div class="card" id="requestResult">
+          <h2>Request Analysis</h2>
+          <div id="requestResultContent" class="result-content">
+            <p class="placeholder-text">Make a resource request to see results</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>Operating Systems Concept Simulator</p>
+    </footer>
+  </div>
+
+  <script src="bankers.js"></script>
+  <script>
+    document.getElementById('simulateBtn').addEventListener('click', simulate);
+    document.getElementById('requestBtn').addEventListener('click', handleRequest);
+    
+    function simulate() {
+      const numProcesses = parseInt(document.getElementById('numProcesses').value);
+      const numResources = parseInt(document.getElementById('numResources').value);
+      const available = document.getElementById('available').value.split(',').map(Number);
+      const maxMatrix = document.getElementById('maxMatrix').value.split(';').map(row => row.split(',').map(Number));
+      const allocMatrix = document.getElementById('allocMatrix').value.split(';').map(row => row.split(',').map(Number));
+      
+      // Validation
+      if (isNaN(numProcesses) || isNaN(numResources) || numProcesses < 1 || numResources < 1) {
+        showResult('Please enter valid numbers for processes and resources', false);
+        return;
+      }
+      
+      if (available.length !== numResources || available.some(isNaN)) {
+        showResult('Please enter valid available resources', false);
+        return;
+      }
+      
+      if (maxMatrix.length !== numProcesses || maxMatrix.some(row => row.length !== numResources || row.some(isNaN))) {
+        showResult('Please enter a valid maximum demand matrix', false);
+        return;
+      }
+      
+      if (allocMatrix.length !== numProcesses || allocMatrix.some(row => row.length !== numResources || row.some(isNaN))) {
+        showResult('Please enter a valid allocation matrix', false);
+        return;
+      }
+      
+      // Calculate need matrix
+      const needMatrix = [];
+      for (let i = 0; i < numProcesses; i++) {
+        const needRow = [];
+        for (let j = 0; j < numResources; j++) {
+          needRow.push(maxMatrix[i][j] - allocMatrix[i][j]);
+        }
+        needMatrix.push(needRow);
+      }
+      
+      // Check if the system is in a safe state
+      const result = isSafe(available, allocMatrix, needMatrix, numProcesses, numResources);
+      
+      if (result.safe) {
+        let safeSequence = 'Safe sequence: ' + result.sequence.join(' → ');
+        showResult(`The system is in a safe state.<br>${safeSequence}`, true);
+      } else {
+        showResult('The system is NOT in a safe state.', false);
+      }
+    }
+    
+    function handleRequest() {
+      const processId = parseInt(document.getElementById('requestProcessId').value);
+      const requestVector = document.getElementById('requestVector').value.split(',').map(Number);
+      const numProcesses = parseInt(document.getElementById('numProcesses').value);
+      const numResources = parseInt(document.getElementById('numResources').value);
+      const available = document.getElementById('available').value.split(',').map(Number);
+      const maxMatrix = document.getElementById('maxMatrix').value.split(';').map(row => row.split(',').map(Number));
+      const allocMatrix = document.getElementById('allocMatrix').value.split(';').map(row => row.split(',').map(Number));
+      
+      // Validation
+      if (isNaN(processId) || processId < 0 || processId >= numProcesses) {
+        showRequestResult('Please enter a valid process ID', false);
+        return;
+      }
+      
+      if (requestVector.length !== numResources || requestVector.some(isNaN)) {
+        showRequestResult('Please enter a valid request vector', false);
+        return;
+      }
+      
+      // Calculate need matrix
+      const needMatrix = [];
+      for (let i = 0; i < numProcesses; i++) {
+        const needRow = [];
+        for (let j = 0; j < numResources; j++) {
+          needRow.push(maxMatrix[i][j] - allocMatrix[i][j]);
+        }
+        needMatrix.push(needRow);
+      }
+      
+      // Check if request is valid
+      for (let i = 0; i < numResources; i++) {
+        if (requestVector[i] > needMatrix[processId][i]) {
+          showRequestResult(`Error: Process ${processId} has exceeded its maximum claim`, false);
+          return;
+        }
+        
+        if (requestVector[i] > available[i]) {
+          showRequestResult(`Error: Not enough resources available to fulfill the request`, false);
+          return;
+        }
+      }
+      
+      // Try to allocate resources
+      const tempAvailable = [...available];
+      const tempAllocMatrix = allocMatrix.map(row => [...row]);
+      const tempNeedMatrix = needMatrix.map(row => [...row]);
+      
+      for (let i = 0; i < numResources; i++) {
+        tempAvailable[i] -= requestVector[i];
+        tempAllocMatrix[processId][i] += requestVector[i];
+        tempNeedMatrix[processId][i] -= requestVector[i];
+      }
+      
+      // Check if the resulting state is safe
+      const result = isSafe(tempAvailable, tempAllocMatrix, tempNeedMatrix, numProcesses, numResources);
+      
+      if (result.safe) {
+        let safeSequence = 'Safe sequence: ' + result.sequence.join(' → ');
+        showRequestResult(`Request can be granted.<br>${safeSequence}`, true);
+      } else {
+        showRequestResult('Request cannot be granted as it would lead to an unsafe state.', false);
+      }
+    }
+    
+    function isSafe(available, allocMatrix, needMatrix, numProcesses, numResources) {
+      const work = [...available];
+      const finish = Array(numProcesses).fill(false);
+      const safeSequence = [];
+      
+      let count = 0;
+      while (count < numProcesses) {
+        let found = false;
+        
+        for (let i = 0; i < numProcesses; i++) {
+          if (!finish[i]) {
+            let j;
+            for (j = 0; j < numResources; j++) {
+              if (needMatrix[i][j] > work[j]) break;
+            }
+            
+            if (j === numResources) {
+              for (let k = 0; k < numResources; k++) {
+                work[k] += allocMatrix[i][k];
+              }
+              
+              finish[i] = true;
+              safeSequence.push(i);
+              found = true;
+              count++;
+            }
+          }
+        }
+        
+        if (!found) break;
+      }
+      
+      return {
+        safe: count === numProcesses,
+        sequence: safeSequence
+      };
+    }
+    
+    function showResult(message, isSuccess) {
+      const resultElement = document.getElementById('result');
+      resultElement.innerHTML = `<p class="${isSuccess ? 'success' : 'error'}">${message}</p>`;
+      
+      if (isSuccess) {
+        document.getElementById('safetyResult').classList.add('success-card');
+        document.getElementById('safetyResult').classList.remove('error-card');
+      } else {
+        document.getElementById('safetyResult').classList.add('error-card');
+        document.getElementById('safetyResult').classList.remove('success-card');
+      }
+    }
+    
+    function showRequestResult(message, isSuccess) {
+      const resultElement = document.getElementById('requestResultContent');
+      resultElement.innerHTML = `<p class="${isSuccess ? 'success' : 'error'}">${message}</p>`;
+      
+      if (isSuccess) {
+        document.getElementById('requestResult').classList.add('success-card');
+        document.getElementById('requestResult').classList.remove('error-card');
+      } else {
+        document.getElementById('requestResult').classList.add('error-card');
+        document.getElementById('requestResult').classList.remove('success-card');
+      }
+    }
+  </script>
+</body>
+</html>
